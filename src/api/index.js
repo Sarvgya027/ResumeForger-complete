@@ -1,0 +1,146 @@
+import { auth } from "../config/firebase.config";
+import { onSnapshot, setDoc, doc, query, updateDoc, arrayUnion, arrayRemove, getDoc } from "firebase/firestore";
+import { db } from "../config/firebase.config";
+import { collection, orderBy } from "firebase/firestore";
+import { toast } from "react-toastify";
+import { data } from "autoprefixer";
+
+
+
+export const getUserDetail = () => {
+
+    return new Promise((resolve, reject) => {
+        const unsubscribe = auth.onAuthStateChanged((userCred) => {
+            if (userCred) {
+                const userData = userCred.providerData[0];
+
+                const unsubscribe = onSnapshot(
+                    doc(db, "users", userData?.uid),
+                    (_doc) => {
+                        if (_doc.exists()) {
+                            resolve(_doc.data());
+                        } else {
+                            setDoc(doc(db, "users", userData?.uid), userData)
+                                .then(() => {
+                                    resolve(userData);
+                                })
+                        }
+                    }
+                );
+
+
+                return unsubscribe;
+            } else {
+                reject(new Error("User is not authenticated"));
+            }
+            unsubscribe(); // Stop listening for auth state changes
+        });
+    });
+}
+
+
+export const getTemplates = () => {
+    return new Promise((resolve, reject) => {
+        const templateQuery = query(
+            collection(db, "templates"),
+            orderBy("timestamp", "asc")
+        );
+        const unsubscribe = onSnapshot(templateQuery, (querySnap) => {
+            const templates = querySnap.docs.map((doc) => doc.data());
+            resolve(templates);
+        }, reject);
+
+        // Return the unsubscribe function
+        return unsubscribe;
+    });
+};
+
+
+export const saveToCollections = async (user, data) => {
+    if (!user?.collection?.includes(data?._id)) {
+        const docRef = doc(db, "users", user?.uid);
+
+        await updateDoc(docRef, {
+            collections: arrayUnion(data?._id),
+        }).then(() => {
+            toast.success("Template added to collection");
+        }).catch((err) => {
+            toast.error(err.message);
+        });
+
+    } else {
+        const docRef = doc(db, "users", user?.uid);
+
+        await updateDoc(docRef, {
+            collections: arrayRemove(data?._id),
+        }).then(() => {
+            toast.success("Template removed from collection");
+        }).catch((err) => {
+            toast.error(err.message);
+        });
+
+    }
+}
+
+export const saveToFavourites = async (user, data) => {
+    if (!data?.favourites?.includes(user?.uid)) {
+        const docRef = doc(db, "templates", data?._id);
+
+        await updateDoc(docRef, {
+            favourites: arrayUnion(user?.uid),
+        }).then(() => {
+            toast.success("Saved to favourites");
+        }).catch((err) => {
+            toast.error(err.message);
+        });
+
+    } else {
+        const docRef = doc(db, "templates", data?._id);
+        await updateDoc(docRef, {
+            favourites: arrayRemove(user?.uid),
+        }).then(() => {
+            toast.success("Removed from favourites");
+        }).catch((err) => {
+            toast.error(err.message);
+        });
+
+    }
+}
+
+
+
+export const getTemplateDetails = async (templateId) => {
+    return new Promise((resolve, reject) => {
+        const docRef = doc(db, "templates", templateId);
+        const unsubscribe = onSnapshot(docRef, (doc) => {
+            resolve(doc.data());
+        });
+        return unsubscribe
+    });
+}
+
+export const getTemplateDetailEditByUser = (uid, id) => {
+    return new Promise((resolve, reject) => {
+        const unsubscribe = onSnapshot(
+            doc(db, "users", uid, "resumes", id),
+            (doc) => {
+                resolve(doc.data());
+            }
+        );
+
+        return unsubscribe;
+    });
+};
+
+export const getSavedResumes = (uid) => {
+    return new Promise((resolve, reject) => {
+        const templateQuery = query(
+            collection(db, "users", uid, "resumes"),
+            orderBy("timestamp", "desc")
+        );
+        const unsubscribe = onSnapshot(templateQuery, (querySnap) => {
+            const templates = querySnap.docs.map((doc) => doc.data());
+            resolve(templates);
+        });
+    });
+};
